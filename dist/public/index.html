@@ -118,11 +118,16 @@
       <input id="msgInput" type="text" placeholder="Nhập tin nhắn..." autocomplete="off" />
       <button type="submit">Gửi</button>
     </form>
+    <div id="configChannel" style="margin-bottom:0.5rem;"></div>
   </div>
-  <script>
+  <script type="module">
+    import { renderConfig } from './configChannel.js';
+
     const logEl = document.getElementById('log');
     const ws = new WebSocket(`ws://${location.host}`);
     const channelSelect = document.getElementById('channelSelect');
+
+    let channels = [];
 
     function renderHistory(history) {
       logEl.innerHTML = '';
@@ -140,6 +145,12 @@
       logEl.scrollTop = logEl.scrollHeight;
     }
 
+    function updateConfigUI(channel) {
+      // Luôn lấy channel mới nhất từ danh sách channels
+      const latest = channels.find(ch => ch.id === channel.id) || channel;
+      renderConfig(latest, ws, channels);
+    }
+
     ws.onmessage = (event) => {
       let data;
       try {
@@ -148,6 +159,7 @@
         data = event.data;
       }
       if (data.type === 'channels') {
+        channels = data.channels;
         channelSelect.innerHTML = '';
         data.channels.forEach((ch) => {
           const opt = document.createElement('option');
@@ -155,20 +167,32 @@
           opt.textContent = ch.name;
           channelSelect.appendChild(opt);
         });
-        // Khi load lần đầu, gửi yêu cầu lấy lịch sử kênh đầu tiên
+        // Hiển thị config và load history cho kênh đầu tiên
         if (data.channels.length > 0) {
+          updateConfigUI(data.channels[0]);
           ws.send(JSON.stringify({ type: 'load_history', channelId: data.channels[0].id }));
         }
       } else if (data.type === 'history') {
         renderHistory(data.history);
       } else if (data.type === 'web_message') {
-        // Nếu là kênh đang xem thì append luôn
         if (data.channel === channelSelect.value) {
           const msg = document.createElement('div');
           msg.textContent = `[Web] -> [channel_${channelSelect.selectedOptions[0]?.textContent}]: ${data.content}`;
           msg.style.color = "#7fff7f";
           logEl.appendChild(msg);
           logEl.scrollTop = logEl.scrollHeight;
+        }
+      } else if (data.type === 'channel_config') {
+        // Nếu là kênh đang xem thì cập nhật UI
+        if (data.channelId === channelSelect.value) {
+          updateConfigUI({ ...data.config, id: data.channelId });
+        }
+        // Cập nhật lại channel trong mảng channels
+        const idx = channels.findIndex(ch => ch.id === data.channelId);
+        if (idx !== -1) channels[idx] = { ...channels[idx], ...data.config };
+        // Nếu là kênh đang xem thì render lại
+        if (data.channelId === channelSelect.value) {
+          updateConfigUI({ ...channels[idx], id: data.channelId });
         }
       } else {
         // Hiển thị log chat khác
@@ -190,11 +214,12 @@
       }
     });
 
-    // Khi đổi kênh, gửi yêu cầu lấy lịch sử kênh đó
+    // Khi đổi kênh, gửi yêu cầu lấy lịch sử và cập nhật config UI
     channelSelect.addEventListener('change', () => {
       ws.send(JSON.stringify({ type: 'load_history', channelId: channelSelect.value }));
-      // Xóa log tạm thời, sẽ render lại khi nhận history
       logEl.innerHTML = '';
+      const channel = channels.find(ch => ch.id === channelSelect.value);
+      if (channel) updateConfigUI(channel);
     });
   </script>
 </body>

@@ -1,7 +1,11 @@
-import { Request, Response } from 'express';
+import express, { Request, Response } from 'express';
 import axios from 'axios';
+import { client } from './discord';
+import { getChannelConfig } from './configChannel';
 
 export function setupRoutes(app: any) {
+    app.use(express.json());
+
     app.get('/callback', async (req: Request, res: Response) => {
         const code = req.query.code as string;
         if (!code) return res.status(400).send('Thiếu mã code từ Discord');
@@ -29,6 +33,26 @@ export function setupRoutes(app: any) {
         } catch (err) {
             console.error(err);
             res.status(500).send('Lỗi khi trao đổi code với Discord');
+        }
+    });
+
+    // Nhận callback từ webhook ngoài
+    app.post('/webhook-callback/:channelId/:msgId', async (req: Request, res: Response) => {
+        const { channelId, msgId } = req.params;
+        const { reply } = req.body;
+        const config = getChannelConfig(channelId);
+        if (!config.handleMessage) return res.status(403).json({ error: 'Not allowed' });
+
+        try {
+            const channel = client.channels.cache.get(channelId);
+            if (channel?.isTextBased()) {
+                await (channel as any).send(reply || '[Webhook không trả về nội dung]');
+                res.json({ status: 'ok' });
+            } else {
+                res.status(404).json({ error: 'Channel not found' });
+            }
+        } catch (e) {
+            res.status(500).json({ error: 'Send failed:', e });
         }
     });
 }

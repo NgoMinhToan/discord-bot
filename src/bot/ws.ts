@@ -1,6 +1,7 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import { client } from './discord';
 import { addHistory, getHistory } from './history';
+import { getChannelConfig, setChannelConfig } from './configChannel';
 
 export const clients: WebSocket[] = [];
 
@@ -22,7 +23,16 @@ export function setupWebSocket(server: any) {
         if (guild) {
             const textChannels = guild.channels.cache
                 .filter((c) => c.isTextBased() && c.type === 0)
-                .map((c) => ({ id: c.id, name: c.name }));
+                .map((c) => {
+                    const config = getChannelConfig(c.id);
+                    return {
+                        id: c.id,
+                        name: c.name,
+                        reply: config.reply,
+                        handleMessage: config.handleMessage,
+                        webhookUrl: config.webhookUrl || ''
+                    };
+                });
             ws.send(JSON.stringify({ type: 'channels', channels: textChannels }));
 
             if (textChannels.length > 0) {
@@ -67,6 +77,16 @@ export function setupWebSocket(server: any) {
                         channel: msg.channelId,
                         content: msg.content
                     }));
+                }
+                // Nhận cấu hình từ client
+                if (msg.type === 'set_channel_config' && msg.channelId) {
+                    setChannelConfig(msg.channelId, msg.config);
+                    broadcast(JSON.stringify({
+                        type: 'channel_config',
+                        channelId: msg.channelId,
+                        config: getChannelConfig(msg.channelId)
+                    }));
+                    return;
                 }
             } catch (e) {
                 console.error('WS message error:', e);
