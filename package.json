@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node dist/index.js",
-    "build": "esbuild src/bot.ts --bundle --platform=node --outfile=dist/index.js && cp -r src/public dist/public",
+    "build": "esbuild src/app.ts --bundle --platform=node --outfile=dist/index.js && cp -r src/public dist/public",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
