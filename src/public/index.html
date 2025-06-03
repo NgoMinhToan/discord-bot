@@ -124,6 +124,22 @@
     const ws = new WebSocket(`ws://${location.host}`);
     const channelSelect = document.getElementById('channelSelect');
 
+    function renderHistory(history) {
+      logEl.innerHTML = '';
+      history.forEach(msg => {
+        const div = document.createElement('div');
+        if (msg.from === 'web') {
+          div.textContent = `[Web] -> [channel_${channelSelect.selectedOptions[0]?.textContent}]: ${msg.content}`;
+          div.style.color = "#7fff7f";
+        } else {
+          div.textContent = `[MSG] ${msg.from}: ${msg.content}`;
+          div.style.color = "#ffd27f";
+        }
+        logEl.appendChild(div);
+      });
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
     ws.onmessage = (event) => {
       let data;
       try {
@@ -132,7 +148,6 @@
         data = event.data;
       }
       if (data.type === 'channels') {
-        // Hiển thị danh sách kênh
         channelSelect.innerHTML = '';
         data.channels.forEach((ch) => {
           const opt = document.createElement('option');
@@ -140,13 +155,21 @@
           opt.textContent = ch.name;
           channelSelect.appendChild(opt);
         });
+        // Khi load lần đầu, gửi yêu cầu lấy lịch sử kênh đầu tiên
+        if (data.channels.length > 0) {
+          ws.send(JSON.stringify({ type: 'load_history', channelId: data.channels[0].id }));
+        }
+      } else if (data.type === 'history') {
+        renderHistory(data.history);
       } else if (data.type === 'web_message') {
-        // Hiển thị tin nhắn gửi từ web
-        const msg = document.createElement('div');
-        msg.textContent = `[Web] -> [channel_${data.channel}]: ${data.content}`;
-        msg.style.color = "#7fff7f";
-        logEl.appendChild(msg);
-        logEl.scrollTop = logEl.scrollHeight;
+        // Nếu là kênh đang xem thì append luôn
+        if (data.channel === channelSelect.value) {
+          const msg = document.createElement('div');
+          msg.textContent = `[Web] -> [channel_${channelSelect.selectedOptions[0]?.textContent}]: ${data.content}`;
+          msg.style.color = "#7fff7f";
+          logEl.appendChild(msg);
+          logEl.scrollTop = logEl.scrollHeight;
+        }
       } else {
         // Hiển thị log chat khác
         const msg = document.createElement('div');
@@ -165,6 +188,13 @@
         ws.send(JSON.stringify({ type: 'send', content: input.value, channelId }));
         input.value = '';
       }
+    });
+
+    // Khi đổi kênh, gửi yêu cầu lấy lịch sử kênh đó
+    channelSelect.addEventListener('change', () => {
+      ws.send(JSON.stringify({ type: 'load_history', channelId: channelSelect.value }));
+      // Xóa log tạm thời, sẽ render lại khi nhận history
+      logEl.innerHTML = '';
     });
   </script>
 </body>

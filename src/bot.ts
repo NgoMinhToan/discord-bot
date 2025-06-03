@@ -7,6 +7,17 @@ import dotenv from 'dotenv';
 import axios from 'axios';
 
 dotenv.config();
+const MAX_HISTORY = parseInt(process.env.MAX_HISTORY || '30', 10);
+const channelHistories: { [channelId: string]: Array<{ from: string, content: string }> } = {};
+
+function addHistory(channelId: string, from: string, content: string) {
+    if (!channelHistories[channelId]) channelHistories[channelId] = [];
+    channelHistories[channelId].push({ from, content });
+    if (channelHistories[channelId].length > MAX_HISTORY) {
+        channelHistories[channelId].shift();
+    }
+}
+
 
 // === Khởi tạo bot ===
 const client = new Client({
@@ -25,6 +36,8 @@ client.once('ready', () => {
 client.on('messageCreate', (msg) => {
     // Đừng nhại chính mình
     if (msg.author.bot) return;
+
+    addHistory(msg.channelId, msg.author.username, msg.content);
 
     const content = `[MSG] ${msg.author.username}: ${msg.content}`;
     console.log(content);
@@ -53,6 +66,16 @@ wss.on('connection', (ws) => {
             .filter((c) => c.isTextBased() && c.type === 0)
             .map((c) => ({ id: c.id, name: c.name }));
         ws.send(JSON.stringify({ type: 'channels', channels: textChannels }));
+
+        // Gửi lịch sử kênh đầu tiên nếu có
+        if (textChannels.length > 0) {
+            const firstChannelId = textChannels[0].id;
+            ws.send(JSON.stringify({
+                type: 'history',
+                channelId: firstChannelId,
+                history: channelHistories[firstChannelId] || []
+            }));
+        }
     }
 
     ws.on('close', () => {
@@ -63,28 +86,36 @@ wss.on('connection', (ws) => {
     ws.on('message', async (data) => {
         try {
             const msg = JSON.parse(data.toString());
+
+            // Khi client yêu cầu đổi kênh, gửi lại lịch sử kênh đó
+            if (msg.type === 'load_history' && msg.channelId) {
+                ws.send(JSON.stringify({
+                    type: 'history',
+                    channelId: msg.channelId,
+                    history: channelHistories[msg.channelId] || []
+                }));
+                return;
+            }
+
             if (msg.type === 'send' && typeof msg.content === 'string' && msg.channelId) {
+                addHistory(msg.channelId, 'web', msg.content);
+
                 // Lấy tên kênh
                 const guild = client.guilds.cache.first();
-                let channelName = msg.channelId;
+                // let channelName = msg.channelId;
                 if (guild) {
                     const channel = guild.channels.cache.get(msg.channelId);
-                    if (channel) channelName = channel.name;
-                }
-                // Broadcast với định dạng mới
-                broadcast(JSON.stringify({
-                    type: 'web_message',
-                    channel: channelName,
-                    content: msg.content
-                }));
-
-                // Gửi vào kênh được chọn
-                if (guild) {
-                    const channel = guild.channels.cache.get(msg.channelId);
+                    // if (channel) channelName = channel.name;
                     if (channel?.isTextBased()) {
                         await (channel as any).send(`[Web] ${msg.content}`);
                     }
                 }
+
+                broadcast(JSON.stringify({
+                    type: 'web_message',
+                    channel: msg.channelId,
+                    content: msg.content
+                }));
             }
         } catch (e) {
             console.error('WS message error:', e);
