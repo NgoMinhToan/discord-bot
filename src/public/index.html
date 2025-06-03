@@ -5,28 +5,167 @@
   <title>Bot Terminal</title>
   <style>
     body {
-      background: black;
-      color: lime;
-      font-family: monospace;
+      background: #181c20;
+      color: #d2ffd2;
+      font-family: 'Fira Mono', 'Consolas', monospace;
+      padding: 0;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h2 {
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+      color: #7fff7f;
+      letter-spacing: 2px;
+      font-size: 2rem;
+      text-shadow: 0 2px 8px #000a;
+    }
+    #container {
+      background: #23272e;
+      border-radius: 12px;
+      box-shadow: 0 4px 32px #0008;
+      padding: 2rem 2rem 1rem 2rem;
+      width: 100%;
+      max-width: 520px;
+      min-height: 60vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #log {
+      flex: 1;
+      background: #181c20;
+      border-radius: 8px;
       padding: 1rem;
-      white-space: pre-wrap;
+      margin-bottom: 1.2rem;
+      overflow-y: auto;
+      font-size: 1.05rem;
+      min-height: 200px;
+      max-height: 350px;
+      border: 1px solid #2e3a2e;
+      box-shadow: 0 2px 8px #0004 inset;
+    }
+    #sendForm {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    #channelSelect {
+      background: #23272e;
+      color: #7fff7f;
+      border: 1px solid #2e3a2e;
+      border-radius: 6px;
+      padding: 0.4rem 0.7rem;
+      font-size: 1rem;
+      outline: none;
+      transition: border 0.2s;
+    }
+    #channelSelect:focus {
+      border: 1.5px solid #7fff7f;
+    }
+    #msgInput {
+      flex: 1;
+      background: #23272e;
+      color: #d2ffd2;
+      border: 1px solid #2e3a2e;
+      border-radius: 6px;
+      padding: 0.4rem 0.7rem;
+      font-size: 1rem;
+      outline: none;
+      transition: border 0.2s;
+    }
+    #msgInput:focus {
+      border: 1.5px solid #7fff7f;
+    }
+    button[type="submit"] {
+      background: linear-gradient(90deg, #7fff7f 60%, #4be04b 100%);
+      color: #181c20;
+      border: none;
+      border-radius: 6px;
+      padding: 0.45rem 1.2rem;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 2px 8px #0003;
+      transition: background 0.2s, color 0.2s;
+    }
+    button[type="submit"]:hover {
+      background: linear-gradient(90deg, #4be04b 60%, #7fff7f 100%);
+      color: #23272e;
+    }
+    @media (max-width: 600px) {
+      #container {
+        padding: 1rem 0.5rem 0.5rem 0.5rem;
+        max-width: 98vw;
+      }
+      #log {
+        font-size: 0.95rem;
+        min-height: 120px;
+        max-height: 200px;
+      }
     }
   </style>
 </head>
 <body>
   <h2>🤖 Bot Terminal</h2>
-  <div id="log"></div>
-
+  <div id="container">
+    <div id="log"></div>
+    <form id="sendForm" autocomplete="off">
+      <select id="channelSelect"></select>
+      <input id="msgInput" type="text" placeholder="Nhập tin nhắn..." autocomplete="off" />
+      <button type="submit">Gửi</button>
+    </form>
+  </div>
   <script>
     const logEl = document.getElementById('log');
     const ws = new WebSocket(`ws://${location.host}`);
+    const channelSelect = document.getElementById('channelSelect');
 
     ws.onmessage = (event) => {
-      const msg = document.createElement('div');
-      msg.textContent = event.data;
-      logEl.appendChild(msg);
-      window.scrollTo(0, document.body.scrollHeight);
+      let data;
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        data = event.data;
+      }
+      if (data.type === 'channels') {
+        // Hiển thị danh sách kênh
+        channelSelect.innerHTML = '';
+        data.channels.forEach((ch) => {
+          const opt = document.createElement('option');
+          opt.value = ch.id;
+          opt.textContent = ch.name;
+          channelSelect.appendChild(opt);
+        });
+      } else if (data.type === 'web_message') {
+        // Hiển thị tin nhắn gửi từ web
+        const msg = document.createElement('div');
+        msg.textContent = `[Web] -> [channel_${data.channel}]: ${data.content}`;
+        msg.style.color = "#7fff7f";
+        logEl.appendChild(msg);
+        logEl.scrollTop = logEl.scrollHeight;
+      } else {
+        // Hiển thị log chat khác
+        const msg = document.createElement('div');
+        msg.textContent = typeof data === 'string' ? data : event.data;
+        logEl.appendChild(msg);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
     };
+
+    // Gửi tin nhắn lên server
+    document.getElementById('sendForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = document.getElementById('msgInput');
+      const channelId = channelSelect.value;
+      if (input.value.trim() && channelId) {
+        ws.send(JSON.stringify({ type: 'send', content: input.value, channelId }));
+        input.value = '';
+      }
+    });
   </script>
 </body>
 </html>

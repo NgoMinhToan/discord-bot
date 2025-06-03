@@ -46,9 +46,49 @@ wss.on('connection', (ws) => {
     console.log('📡 Web client connected');
     clients.push(ws);
 
+    // Gửi danh sách kênh text về client khi vừa kết nối
+    const guild = client.guilds.cache.first();
+    if (guild) {
+        const textChannels = guild.channels.cache
+            .filter((c) => c.isTextBased() && c.type === 0)
+            .map((c) => ({ id: c.id, name: c.name }));
+        ws.send(JSON.stringify({ type: 'channels', channels: textChannels }));
+    }
+
     ws.on('close', () => {
         const i = clients.indexOf(ws);
         if (i >= 0) clients.splice(i, 1);
+    });
+
+    ws.on('message', async (data) => {
+        try {
+            const msg = JSON.parse(data.toString());
+            if (msg.type === 'send' && typeof msg.content === 'string' && msg.channelId) {
+                // Lấy tên kênh
+                const guild = client.guilds.cache.first();
+                let channelName = msg.channelId;
+                if (guild) {
+                    const channel = guild.channels.cache.get(msg.channelId);
+                    if (channel) channelName = channel.name;
+                }
+                // Broadcast với định dạng mới
+                broadcast(JSON.stringify({
+                    type: 'web_message',
+                    channel: channelName,
+                    content: msg.content
+                }));
+
+                // Gửi vào kênh được chọn
+                if (guild) {
+                    const channel = guild.channels.cache.get(msg.channelId);
+                    if (channel?.isTextBased()) {
+                        await (channel as any).send(`[Web] ${msg.content}`);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('WS message error:', e);
+        }
     });
 });
 
