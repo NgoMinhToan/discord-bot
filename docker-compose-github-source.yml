@@ -1,0 +1,18 @@
+# docker-compose-github-source.yml
+version: '3'
+
+services:
+  bot:
+    build:
+      context: https://github.com/NgoMinhToan/discord-bot.git#main
+      dockerfile: ./Dockerfile
+    container_name: discord-bot
+    restart: always
+    # env_file: .env
+    environment:
+      - DISCORD_TOKEN=production
+      - CLIENT_ID=your_token_here
+      - MAX_HISTORY=50
+      - REPLY_ENABLED=false
+    ports:
+      - "3000:3000"
